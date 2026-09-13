@@ -29,10 +29,8 @@ internal class HTTPClient(val session: Session) {
     private val requestApi = RetrofitHelper.create(InnertubePlayerApi::class.java)
 
     fun fetch(input: String, init: RequestInit): PlayerResult? {
-        val innertubeUrl = URLS.API.PRODUCTION_1 + session.apiVersion
-        val baseURL = innertubeUrl
-
-        val url = "${baseURL}${if (baseURL.endsWith("/") || input.startsWith("/")) "" else "/"}$input"
+        val baseUrl = URLS.API.PRODUCTION_1 + session.apiVersion
+        val url = "${baseUrl}${if (baseUrl.endsWith("/") || input.startsWith("/")) "" else "/"}$input"
 
         val requestHeaders = init.headers
 
@@ -43,18 +41,13 @@ internal class HTTPClient(val session: Session) {
 
         setupCommonHeaders(requestHeaders, session, url.toUri())
 
-        //val isInnertubeReq = baseURL == innertubeUrl || baseURL == URLS.YT_UPLOAD
-
         var requestBody: String? = null
-        var isWebKids: Boolean? = false
 
         if (requestHeaders["Content-Type"] == "application/json") {
-            val jsonPayload = processJsonPayload(init.body, session)
-
-            val (newBody, processedIsWebKids, processedClientVersion, processedClientNameId, adjustedClientName) = jsonPayload
+            val (newBody, processedClientVersion, processedClientNameId, adjustedClientName) =
+                processJsonPayload(init.body, session)
 
             requestBody = newBody
-            isWebKids = processedIsWebKids
 
             processedClientVersion?.let {
                 requestHeaders["X-Youtube-Client-Version"] = it
@@ -141,32 +134,26 @@ internal class HTTPClient(val session: Session) {
     }
 
     private fun processJsonPayload(body: RequestInitBody, session: Session): JsonPayloadProcessed {
-        val parsedPayload = body
         val adjustedContext = session.context // why do JSON.parse(JSON.stringify(session.context)) as Context
 
-        adjustContext(adjustedContext, parsedPayload.client)
+        adjustContext(adjustedContext, body.client)
 
         // merge session and body
 
-        parsedPayload.context = adjustedContext
+        body.context = adjustedContext
 
-        val newPayload = parsedPayload
+        val clientVersion = body.context?.client?.clientVersion
 
-        val clientVersion = newPayload.context?.client?.clientVersion
-
-        val clientNameFromAdjustedContext = newPayload.context?.client?.clientName
+        val clientNameFromAdjustedContext = body.context?.client?.clientName
         val clientNameId = CLIENT_NAME_IDS[clientNameFromAdjustedContext]
 
-        newPayload.client = null
-
-        val isWebKids = newPayload.context?.client?.clientName == CLIENTS.WEB_KIDS.NAME
+        body.client = null
 
         return JsonPayloadProcessed(
-            toJsonString(newPayload),
-            isWebKids,
+            toJsonString(body),
             clientVersion,
             clientNameId,
-            newPayload.context?.client?.clientName
+            body.context?.client?.clientName
         )
     }
 
@@ -278,7 +265,10 @@ internal class RequestInitBody(
     // other values specific for player....
     session: Session
 ) {
+    // Gson reflects these public properties into the player request payload.
+    @Suppress("unused")
     val contentCheckOk: Boolean = true
+    @Suppress("unused")
     val racyCheckOk: Boolean = true
     val playbackContext: PlaybackContext = PlaybackContext(session)
     var context: InnertubeContext? = null
@@ -293,14 +283,13 @@ internal class RequestInitBody(
         //}
 
         class ContentPlaybackContext(session: Session) {
-            val signatureTimestamp: String? = session.player.signatureTimestamp
+            val signatureTimestamp: String = session.player.signatureTimestamp
         }
     }
 }
 
 internal data class JsonPayloadProcessed(
     val newBody: String,
-    val isWebKids: Boolean,
     val clientVersion: String?,
     val clientNameId: String?,
     val adjustedClientName: String?

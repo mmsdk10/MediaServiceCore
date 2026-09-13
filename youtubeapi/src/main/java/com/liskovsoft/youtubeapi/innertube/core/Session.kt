@@ -35,10 +35,7 @@ private interface InnertubeConfigApi {
 
 internal class Session private constructor(
     val context: InnertubeContext,
-    val apiKey: String,
     val apiVersion: String,
-    val accountIndex: Int,
-    val configData: String?,
     val userAgent: String,
     val player: Player,
     val cookie: String? = null,
@@ -54,17 +51,17 @@ internal class Session private constructor(
                     return it.second
             }
 
-            val (apiKey, apiVersion, configData, context, userAgent, accountIndex) = getSessionData(options) ?: return null
+            val (_, apiVersion, _, context, userAgent, _) = getSessionData() ?: return null
 
             val session =
-                Session(context, apiKey, apiVersion, accountIndex, configData, userAgent, Player.create(options?.poToken, options?.playerId))
+                Session(context, apiVersion, userAgent, Player.create(options?.playerId))
 
             cached = Pair(options?.playerId, session)
 
             return session
         }
 
-        fun getSessionData(options: SessionOptions? = null): SessionData? {
+        fun getSessionData(): SessionData? {
             // TODO: add caching of session data
 
             val args = SessionArgs()

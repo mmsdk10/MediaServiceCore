@@ -60,7 +60,7 @@ internal open class SearchService2 {
     }
 
     open fun getSearchTags(searchText: String?): List<String>? {
-        var country: String? = null
+        var country: String?
         val language: String? = null
 
         val localeManager = LocaleManager.instance()
@@ -68,10 +68,10 @@ internal open class SearchService2 {
 
         // fix empty popular searches (country and language should match or use only country)
         //language = localeManager.getLanguage();
-        return getSearchTags(searchText, null, country, language)
+        return getSearchTags(searchText, country, language)
     }
 
-    private fun getSearchTags(searchText: String?, suggestToken: String?, country: String?, language: String?): List<String>? {
+    private fun getSearchTags(searchText: String?, country: String?, language: String?): List<String>? {
         var searchText = searchText
         if (searchText == null) {
             searchText = ""
@@ -80,7 +80,7 @@ internal open class SearchService2 {
         val wrapper: Call<SearchTags?>? =
             mSearchApi2.getSearchTags(
                 searchText,
-                suggestToken,
+                null,
                 country,
                 language
             )

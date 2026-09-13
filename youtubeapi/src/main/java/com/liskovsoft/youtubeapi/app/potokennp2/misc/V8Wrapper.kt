@@ -1,6 +1,7 @@
 package com.liskovsoft.youtubeapi.app.potokennp2.misc
 
 import com.eclipsesource.v8.JavaVoidCallback
+import com.eclipsesource.v8.JavaCallback
 import com.eclipsesource.v8.V8
 import com.eclipsesource.v8.V8ScriptExecutionException
 import com.liskovsoft.youtubeapi.app.nsigsolver.common.withLock
@@ -64,6 +65,13 @@ internal class V8Wrapper {
     }
 
     fun registerJavaMethod(callback: JavaVoidCallback, jsFunctionName: String) {
+        synchronized(v8Lock) {
+            initRuntime()
+            v8Runtime?.registerJavaMethod(callback, jsFunctionName)
+        }
+    }
+
+    fun registerJavaCallback(callback: JavaCallback, jsFunctionName: String) {
         synchronized(v8Lock) {
             initRuntime()
             v8Runtime?.registerJavaMethod(callback, jsFunctionName)

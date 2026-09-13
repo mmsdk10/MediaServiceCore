@@ -1,8 +1,6 @@
 package com.liskovsoft.youtubeapi.app.potokennp2.generators
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import androidx.annotation.MainThread
 import com.liskovsoft.sharedutils.mylogger.Log
 import com.liskovsoft.sharedutils.okhttp.OkHttpManager
@@ -13,16 +11,15 @@ import com.liskovsoft.youtubeapi.app.potokennp2.core.PoTokenException
 import com.liskovsoft.youtubeapi.app.potokennp2.core.PoTokenGenerator
 import com.liskovsoft.youtubeapi.app.potokennp2.core.V8WrapperException
 import com.liskovsoft.youtubeapi.app.potokennp2.core.buildExceptionForJsError
+import com.liskovsoft.youtubeapi.app.potokennp2.misc.V8Wrapper
 import com.liskovsoft.youtubeapi.app.potokennp2.misc.hasThermalServiceBug
 import com.liskovsoft.youtubeapi.app.potokennp2.misc.hasUsbServiceBug
-import com.liskovsoft.youtubeapi.app.potokennp2.misc.V8Wrapper
 import com.liskovsoft.youtubeapi.app.potokennp2.misc.parseDescrambledChallengeData
 import com.liskovsoft.youtubeapi.app.potokennp2.misc.parseIntegrityTokenData
 import com.liskovsoft.youtubeapi.app.potokennp2.misc.potLibPrefix
 import com.liskovsoft.youtubeapi.app.potokennp2.misc.stringToU8
 import com.liskovsoft.youtubeapi.app.potokennp2.misc.u8ToBase64
 import com.liskovsoft.youtubeapi.common.helpers.AppClient
-import io.reactivex.SingleEmitter
 import io.reactivex.disposables.Disposable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -33,7 +30,6 @@ import java.util.concurrent.atomic.AtomicInteger
  * TODO: remove me. It's impossible to build full fledged browser-like environment using the V8 engine
  */
 internal class PoTokenV8 private constructor(
-    context: Context,
     private var onInitDone: () -> Unit
 ) : PoTokenGenerator {
     private val v8Wrapper: V8Wrapper = V8Wrapper()
@@ -93,7 +89,7 @@ internal class PoTokenV8 private constructor(
         val disposables = ConcurrentHashMap<Int, Disposable>()
         val idGen = AtomicInteger(1)
 
-        v8Wrapper.registerJavaMethod({ _, args ->
+        v8Wrapper.registerJavaCallback({ _, args ->
             val delay = args.getInteger(0)
 
             val id = idGen.getAndIncrement()
@@ -290,9 +286,7 @@ internal class PoTokenV8 private constructor(
     }
 
     /**
-     * Extracts and removes from the [poTokenEmitters] list a [SingleEmitter] based on its
-     * [identifier]. The emitter is supposed to be used immediately after to either signal a success
-     * or an error.
+     * Extracts and removes from [poTokenEmitters] the callback associated with [identifier].
      */
     private fun popPoTokenEmitter(identifier: String): ((String) -> Unit)? {
         return synchronized(poTokenEmitters) {
@@ -302,15 +296,10 @@ internal class PoTokenV8 private constructor(
         }
     }
 
-    /**
-     * Clears [poTokenEmitters] and returns its previous contents. The emitters are supposed to be
-     * used immediately after to either signal a success or an error.
-     */
-    private fun popAllPoTokenEmitters(): List<Pair<String, (String) -> Unit>> {
-        return synchronized(poTokenEmitters) {
-            val result = poTokenEmitters.toList()
+    /** Clears pending PoToken callbacks after initialization fails. */
+    private fun clearPoTokenEmitters() {
+        synchronized(poTokenEmitters) {
             poTokenEmitters.clear()
-            result
         }
     }
     //endregion
@@ -321,9 +310,7 @@ internal class PoTokenV8 private constructor(
      * Makes a POST request to [url] with the given [data] by setting the correct headers. Calls
      * [onInitializationErrorCloseAndCancel] in case of any network errors and also if the response
      * does not have HTTP code 200, therefore this is supposed to be used only during
-     * initialization. Calls [handleResponseBody] with the response body if the response is
-     * successful. The request is performed in the background and a disposable is added to
-     * [disposables].
+     * initialization. Returns the response body only when the request succeeds.
      */
     private fun makeBotguardServiceRequest(
         url: String,
@@ -358,19 +345,18 @@ internal class PoTokenV8 private constructor(
     }
 
     /**
-     * Handles any error happening during initialization, releasing resources and sending the error
-     * to [generatorEmitter].
+     * Handles an initialization error by releasing resources and notifying the factory caller.
      */
     private fun onInitializationErrorCloseAndCancel(error: Throwable) {
         initError = error
-        popAllPoTokenEmitters()
+        clearPoTokenEmitters()
         close()
         // throw error
         onInitDone()
     }
 
     /**
-     * Releases all [v8Wrapper] and [disposables] resources.
+     * Releases the V8 runtime resources.
      */
     @MainThread
     override fun close() {
@@ -400,7 +386,7 @@ internal class PoTokenV8 private constructor(
             val latch = CountDownLatch(1)
 
             val potWv = try {
-                PoTokenV8(context) { latch.countDown() }
+                PoTokenV8 { latch.countDown() }
             } catch (e: Throwable) {
                 latch.countDown()
                 throw V8WrapperException("${e::class.simpleName}: ${e.message}")
@@ -414,16 +400,5 @@ internal class PoTokenV8 private constructor(
             return potWv
         }
 
-        /**
-         * Runs [runnable] on the main thread using `Handler(Looper.getMainLooper()).post()`, and
-         * if the `post` fails emits an error on [emitterIfPostFails].
-         */
-        private fun runOnMainThread(
-            runnable: Runnable
-        ) {
-            if (!Handler(Looper.getMainLooper()).post(runnable)) {
-                throw PoTokenException("Could not run on main thread")
-            }
-        }
     }
 }

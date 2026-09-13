@@ -26,7 +26,7 @@ import com.liskovsoft.youtubeapi.videoinfo.models.VideoUrlHolder
 internal class Player private constructor(
     val playerUrl: String?
 ) {
-    private val TAG = Player::class.simpleName
+    private val tag = Player::class.simpleName
 
     val signatureTimestamp: String by lazy { appService.signatureTimestamp }
     private val appService by lazy { AppService.instance() }
@@ -41,7 +41,7 @@ internal class Player private constructor(
         decipherFormats(formatInfo)
 
         if (formatInfo.isLive) {
-            Log.d(TAG, "Enable seeking support on live streams...")
+            Log.d(tag, "Enable seeking support on live streams...")
             formatInfo.sync(getDashInfo(formatInfo))
         }
 
@@ -85,9 +85,9 @@ internal class Player private constructor(
     private fun extractSParams(urlHolders: List<VideoUrlHolder>): List<String?> = urlHolders.map { it.getSParam() }
 
     private fun extractNParams(urlHolders: List<VideoUrlHolder>): List<String?> = urlHolders.map { it.getNParam() } // All throttled strings has same values
-    
+
     private fun applyNParams(urlHolders: List<VideoUrlHolder>, nParams: List<String?>?) {
-        if (nParams == null || nParams.isEmpty()) {
+        if (nParams.isNullOrEmpty()) {
             return
         }
 
@@ -98,7 +98,7 @@ internal class Player private constructor(
             urlHolders[i].setNParam(nParams[if (sameSize) i else 0])
         }
     }
-    
+
     private fun applySignatures(urlHolders: List<VideoUrlHolder>, signatures: List<String?>?) {
         if (signatures == null) {
             return
@@ -161,11 +161,7 @@ internal class Player private constructor(
     }
 
     private fun getCumulativeDashInfo(formatInfo: MediaItemFormatInfoImpl): DashInfo? {
-        val format = getSmallestAudio(formatInfo)
-
-        if (format == null) {
-            return null
-        }
+        val format = getSmallestAudio(formatInfo) ?: return null
 
         return try {
             getDashInfoHeaders(format.getUrl())
@@ -185,39 +181,25 @@ internal class Player private constructor(
 
     private fun getSmallestAudio(formatInfo: MediaItemFormatInfoImpl): MediaFormatImpl? {
         val format = Helpers.findFirst(
-            formatInfo.getAdaptiveFormats(),
-            Helpers.Filter { item -> MediaFormatUtils.isAudio(item!!.getMimeType()) }) // smallest format
+            formatInfo.getAdaptiveFormats()
+        ) { item -> MediaFormatUtils.isAudio(item!!.getMimeType()) } // smallest format
         return format
     }
 
-    private fun getDashInfoUrl(url: String?): DashInfoUrl? {
-        if (url == null) {
-            return null
-        }
+    private fun getDashInfoUrl(url: String?): DashInfoUrl? =
+        url?.let { RetrofitHelper.get(dashInfoApi.getDashInfoUrl(it)) }
 
-        return RetrofitHelper.get(dashInfoApi.getDashInfoUrl(url))
-    }
-
-    private fun getDashInfoHeaders(url: String?): DashInfoHeaders? {
-        if (url == null) {
-            return null
-        }
-
+    private fun getDashInfoHeaders(url: String?): DashInfoHeaders? = url?.let {
         // Range doesn't work???
         //return RetrofitHelper.getHeaders(mFileApi.getHeaders(url + SMALL_RANGE));
-        return DashInfoHeaders(RetrofitHelper.getHeaders(fileApi.getHeaders(url)))
+        DashInfoHeaders(RetrofitHelper.getHeaders(fileApi.getHeaders(it)))
     }
-    
-    private fun getDashInfoContent(url: String?): DashInfoContent? {
-        if (url == null) {
-            return null
-        }
 
-        return RetrofitHelper.get(dashInfoApi.getDashInfoContent(url))
-    }
-    
+    private fun getDashInfoContent(url: String?): DashInfoContent? =
+        url?.let { RetrofitHelper.get(dashInfoApi.getDashInfoContent(it)) }
+
     companion object {
-        fun create(poToken: String?, playerId: String?): Player {
+        fun create(playerId: String?): Player {
             val realPLayerId = playerId ?: getPlayerId()
             val playerUrl = realPLayerId?.let { getPlayerUrl(it) }
             //val js = getPlayerJs(playerUrl)
